@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, X, RefreshCw, AlertCircle, Layers, 
-  TrendingUp, ChevronRight, ChevronDown, Folder, ArrowDownCircle, Search, Download, Upload, Lock, Database
+  TrendingUp, ChevronRight, ChevronDown, Folder, Table, ArrowDownCircle, Search, Download, Upload, Lock, Database
 } from 'lucide-react';
 
 const DEFAULT_SHEET_ID = '14BU7F2saoKWP6W5Dk2D4FWMv9VewflpMHvaR2Ca8hhA'; // LJR & Global
@@ -72,7 +72,7 @@ const getActiveTabConfig = (tabId) => {
   return { id: tabId, label: tabId, baseName: tabId, sheetId: DEFAULT_SHEET_ID };
 };
 
-// 💡 GID MAPPING
+// 💡 GID MAPPING SESUAI REFERENSI TABEL
 const GID_MAPPING = {
   'Budget': '313391198',
   'LJR_Detail': '711609256',
@@ -92,11 +92,13 @@ const GID_MAPPING = {
   'TRANSMARCO_2026': '1033413672',
   'PROJECT FAP_2025': '218289224',
   'PROJECT FAP_2026': '1108934369',
+  // MJR GIDs
   'MJR_Detail': '1645115885',
   'MJR_Rekap COA Tahun': '981156972',
   'MJR_Rekap COA Bulan': '1366423927',
   'ECS_2025': '374221291',
   'ECS_2026': '2110653822',
+  // LJRS GIDs
   'LJRS_Detail': '576794291',
   'LJRS_Rekap COA Tahun': '343086220',
   'LJRS_Rekap COA Bulan': '1904925222',
@@ -161,21 +163,26 @@ function parseCSV(text) {
     const nextChar = text[i + 1];
     
     if (char === '"' && inQuotes && nextChar === '"') {
-      currentCell += '"'; i++; 
+      currentCell += '"';
+      i++; 
     } else if (char === '"') {
       inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
-      currentRow.push(currentCell); currentCell = '';
+      currentRow.push(currentCell);
+      currentCell = '';
     } else if ((char === '\n' || char === '\r') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') i++;
-      currentRow.push(currentCell); rows.push(currentRow);
-      currentRow = []; currentCell = '';
+      currentRow.push(currentCell);
+      rows.push(currentRow);
+      currentRow = [];
+      currentCell = '';
     } else {
       currentCell += char;
     }
   }
   if (currentRow.length > 0 || currentCell !== '') {
-    currentRow.push(currentCell); rows.push(currentRow);
+    currentRow.push(currentCell);
+    rows.push(currentRow);
   }
   return rows.filter(r => r.some(c => c.trim() !== ''));
 }
@@ -185,6 +192,7 @@ const App = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState({ 'LJR Jakarta': true, 'MJR': true, 'LJRS': true });
 
+  // 💡 Menutup sidebar secara otomatis jika dibuka di HP
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setSidebarOpen(false);
@@ -210,10 +218,9 @@ const App = () => {
   const [showPareto, setShowPareto] = useState(false); 
   const [categoryFilter, setCategoryFilter] = useState('All'); 
   
-  // 💡 NEW STATE: Filter Rentang Bulan (Start & End)
   const [startMonthIndex, setStartMonthIndex] = useState(0);
   const [endMonthIndex, setEndMonthIndex] = useState(11);
-  
+
   const [visibleRows, setVisibleRows] = useState(100);
 
   // States Khusus Tab Detail (Upload & Download)
@@ -244,7 +251,9 @@ const App = () => {
     if (str === null || str === undefined) return 0;
     let text = str.toString().trim();
     if (text === '-' || text === '' || text === '0') return 0;
+
     const isNegative = text.includes('-') || (text.includes('(') && text.includes(')'));
+
     text = text.replace(/[^0-9.,]/g, '');
     if (text === '') return 0;
 
@@ -287,6 +296,7 @@ const App = () => {
     document.body.removeChild(link);
   };
 
+  // 💡 PERBAIKAN: Fungsi Download Global
   const handleDownloadExcel = () => {
     if (data.length === 0) {
         alert("Tidak ada data untuk di-download.");
@@ -312,7 +322,7 @@ const App = () => {
         const headerLabels = ['Description', ...visibleHeaders.map(h => h.label)];
         csvContent += headerLabels.map(h => `"${h}"`).join(';') + '\n';
         
-        data.forEach(row => {
+        filteredData.forEach(row => {
             const rowData = [ `"${row.coa.replace(/"/g, '""')}"` ];
             row.values.forEach((val, i) => {
                 if (isColumnVisible(detailHeaders[i].label)) {
@@ -399,7 +409,23 @@ const App = () => {
     reader.onload = async (e) => {
         const csvText = e.target.result;
         try {
-            const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyT6HVMz56i62dNaQncZjjk5WLo38PW5oHd6DNLrfR72c210p7jAF-N3F_lCDwuMwR-/exec";
+            
+            // 💡 DYNAMIC UPLOAD SCRIPT_URL: Aplikasi akan mengarahkan upload berdasarkan sheet yang sedang aktif.
+            let SCRIPT_URL = "";
+            if (activeTabConfig.sheetId === DEFAULT_SHEET_ID) {
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzRlX8ExsMLxpNPo7cu15rnriAAX2Fm1YfPdVrIqnz2Se86EhuMIqV8yM1A9Kum8pH6/exec"; // URL LJR JAKARTA
+            } else if (activeTabConfig.sheetId === MJR_SHEET_ID) {
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrKoRUaLSsHSXgbsRFbo7wzDoVADAJV658S-BePk0huNWOJHEz5_AWeyfCoE7Bz5cNHg/exec"; // URL MJR
+            } else if (activeTabConfig.sheetId === LJRS_SHEET_ID) {
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKarNoatig79tiPKSGqGc8bUKrxJIAveYbye-F6cM9fkS7iZ54OS6ge3xEzt5pxjLP/exec"; // URL LJRS
+            }
+            
+            if (!SCRIPT_URL || SCRIPT_URL.includes("URL_SCRIPT")) {
+                alert("⚠️ Anda belum memasukkan URL Web App Script untuk spreadsheet ini di dalam kode (App.jsx). Silakan Deploy kode.gs lalu tempel URL-nya di App.jsx terlebih dahulu.");
+                setIsUploading(false);
+                return;
+            }
+
             const response = await fetch(SCRIPT_URL, {
                 method: "POST",
                 body: csvText,
@@ -415,7 +441,7 @@ const App = () => {
             }
         } catch (err) {
             console.error(err);
-            setError("Gagal Upload: Pastikan akses URL Script sudah diatur ke 'Anyone'. Error: " + err.message);
+            setError("Gagal Upload: Pastikan akses URL Script sudah benar dan disetel ke 'Anyone'. Error: " + err.message);
         } finally {
             setIsUploading(false);
             setPendingFile(null);
@@ -444,7 +470,6 @@ const App = () => {
       setShowPareto(false);
       setSelectedMonth('');
       
-      // Reset Rentang Bulan setiap pindah tab
       setStartMonthIndex(0);
       setEndMonthIndex(11);
       
@@ -455,6 +480,7 @@ const App = () => {
       setActiveTab(tabId);
     }
     
+    // Menutup sidebar otomatis saat tab di klik (Khusus HP/Layar kecil)
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
         setSidebarOpen(false);
     }
@@ -487,15 +513,19 @@ const App = () => {
           queryParam = `&tq=${encodeURIComponent('SELECT * LIMIT 100000')}`;
       }
 
+      // 💡 LOGIKA SHEET DINAMIS MUTLAK BERDASARKAN GID ATAU NAMA SHEET
       const yearToFetch = selectedYear === 'All' ? '2025' : selectedYear;
       let targetUrl = '';
       
+      // Khusus untuk mapping GID core tab agar menyesuaikan prefix MJR/LJR/LJRS
       const mappingKey = isCoreTab ? tabIdToFetch : `${baseName}_${yearToFetch}`;
       const mappedGid = GID_MAPPING[mappingKey];
 
       if (mappedGid) {
+          // Tarik berdasarkan GID khusus dari referensi URL
           targetUrl = `https://docs.google.com/spreadsheets/d/${currentSheetId}/gviz/tq?tqx=out:csv&gid=${mappedGid}${queryParam}&t=${uniqueId}`;
       } else {
+          // Fallback mekanisme lama untuk menu di luar referensi GID
           let fetchSheetName = baseName;
           if (!isCoreTab) {
               if (baseName === 'AAM DDC Makasar' || baseName === 'AAM MAKASAR') {
@@ -519,7 +549,7 @@ const App = () => {
       if (!rows || rows.length === 0) throw new Error('Data di dalam tab kosong.');
 
       // =========================================================================
-      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS: REKAP COA TAHUN DAN BULAN
+      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS: REKAP COA TAHUN DAN BULAN (FINAL)
       // =========================================================================
       if (baseName === 'Rekap COA Bulan' || baseName === 'Rekap COA Tahun') {
          let headerRowIdx = -1;
@@ -569,8 +599,8 @@ const App = () => {
              }
          }
 
-         dynamicCols.push({ index: -1, label: 'Total 2025', isCalc: 'Total 2025' });
-         dynamicCols.push({ index: -1, label: 'Total 2026', isCalc: 'Total 2026' });
+         dynamicCols.push({ index: -1, label: 'Target', isCalc: 'Total 2025' });
+         dynamicCols.push({ index: -1, label: 'Actual', isCalc: 'Total 2026' });
          dynamicCols.push({ index: -1, label: '%', isCalc: 'Percent' });
 
          setDetailHeaders(dynamicCols);
@@ -679,25 +709,39 @@ const App = () => {
               if (selectedYear !== 'All') {
                   const yTargetStr = selectedYear.toString(); 
                   const yShortStr = yTargetStr.slice(-2);     
-                  let matched = false;
-
-                  if (xyearIdx !== -1) {
+                  
+                  // 💡 STRICT CHECK KHUSUS LJR JAKARTA & MJR (LJRS tidak disentuh sama sekali)
+                  const isLJRSDetail = currentSheetId === LJRS_SHEET_ID;
+                  
+                  if (!isLJRSDetail && xyearIdx !== -1) {
+                      // Filter super ketat khusus MJR & LJR: Langsung buang jika XYEAR tidak cocok
                       let val = String(row[xyearIdx] || '').trim().replace('.0', '');
-                      if (val === yTargetStr || val === yShortStr) matched = true;
-                  } 
-                  if (!matched && xdateIdx !== -1) {
-                      const val = String(row[xdateIdx] || '').trim();
-                      if (val.includes(yTargetStr)) matched = true;
+                      if (val !== yTargetStr && val !== yShortStr) {
+                          continue; 
+                      }
+                      rowYearMatch = true;
+                  } else {
+                      // Logika bawaan khusus untuk LJRS (Sudah sempurna)
+                      let matched = false;
+
+                      if (xyearIdx !== -1) {
+                          let val = String(row[xyearIdx] || '').trim().replace('.0', '');
+                          if (val === yTargetStr || val === yShortStr) matched = true;
+                      } 
+                      if (!matched && xdateIdx !== -1) {
+                          const val = String(row[xdateIdx] || '').trim();
+                          if (val.includes(yTargetStr)) matched = true;
+                      }
+                      if (!matched && xperiodeIdx !== -1) {
+                          const val = String(row[xperiodeIdx] || '').trim();
+                          if (val.startsWith(yShortStr) || val.includes(yTargetStr)) matched = true;
+                      }
+                      if (!matched && idCodeCoaIdx !== -1) {
+                          const val = String(row[idCodeCoaIdx] || '').trim();
+                          if (val.includes(yTargetStr)) matched = true;
+                      }
+                      rowYearMatch = matched;
                   }
-                  if (!matched && xperiodeIdx !== -1) {
-                      const val = String(row[xperiodeIdx] || '').trim();
-                      if (val.startsWith(yShortStr) || val.includes(yTargetStr)) matched = true;
-                  }
-                  if (!matched && idCodeCoaIdx !== -1) {
-                      const val = String(row[idCodeCoaIdx] || '').trim();
-                      if (val.includes(yTargetStr)) matched = true;
-                  }
-                  rowYearMatch = matched;
               }
               
               if (!rowYearMatch) continue;
@@ -826,7 +870,6 @@ const App = () => {
               if (!row) continue;
 
               const dynamicValues = dynamicHeaderCols.map(col => {
-                  // Basic extraction first, Dynamic filtering done in useMemo for performance
                   if (col.index === 'summery_calc') {
                       let rowSum = 0;
                       dynamicHeaderCols.forEach(headerCol => {
@@ -838,7 +881,6 @@ const App = () => {
                       return rowSum;
                   } 
                   else if (col.index === 'target_calc' || col.index === 'actual_calc' || col.index === 'percent_calc') {
-                      // Will be dynamically calculated in useMemo filteredData
                       return 0; 
                   }
 
@@ -883,7 +925,6 @@ const App = () => {
     fetchData(activeTab, false);
     setCategoryFilter('All');
     setSearchQuery('');
-    setSelectedMonth('');
     setStartMonthIndex(0);
     setEndMonthIndex(11);
     setShowPareto(false);
@@ -937,8 +978,9 @@ const App = () => {
       const isRekapTab = activeBaseName === 'Rekap COA Bulan' || activeBaseName === 'Rekap COA Tahun';
       const isProjectTab = !isRekapTab && activeBaseName !== 'Detail' && activeBaseName !== 'Budget';
       
-      // 🚀 DYNAMIC CALCULATION UNTUK PROJECT 2026 (RENTANG BULAN)
       let processedBaseData = baseFilteredData;
+
+      // 🚀 DYNAMIC CALCULATION UNTUK PROJECT 2026 (RENTANG BULAN)
       if (isProjectTab && selectedYear === '2026') {
           processedBaseData = baseFilteredData.map(item => {
               if (!item.isProjectMirror || !item.dynamicValues) return item;
@@ -968,63 +1010,96 @@ const App = () => {
 
               return { ...item, dynamicValues: newDynamicValues };
           });
-      }
 
-      if (isProjectTab && selectedYear === '2026' && showPareto) {
-          const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
-          if (percentIdx !== -1) {
-              const paretoData = processedBaseData.map(item => {
-                  if (item.isProjectMirror && item.dynamicValues) {
-                      const val = item.dynamicValues[percentIdx];
-                      if (item.dynamicValues[0] && String(item.dynamicValues[0]).toLowerCase().includes('total')) {
-                          return { ...item, _tempPercent: -Infinity };
-                      }
-                      let pct = -Infinity;
-                      if (val !== '' && val !== '-') {
-                          if (typeof val === 'number') pct = val;
-                          else {
-                              const cleaned = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
-                              if (!isNaN(cleaned)) pct = cleaned;
+          // 🚀 PARETO UNTUK PROJECT 2026
+          if (showPareto) {
+              const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
+              if (percentIdx !== -1) {
+                  const paretoData = processedBaseData.map(item => {
+                      if (item.isProjectMirror && item.dynamicValues) {
+                          const val = item.dynamicValues[percentIdx];
+                          if (item.dynamicValues[0] && String(item.dynamicValues[0]).toLowerCase().includes('total')) {
+                              return { ...item, _tempPercent: -Infinity };
                           }
+                          let pct = -Infinity;
+                          if (val !== '' && val !== '-') {
+                              if (typeof val === 'number') pct = val;
+                              else {
+                                  const cleaned = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+                                  if (!isNaN(cleaned)) pct = cleaned;
+                              }
+                          }
+                          return { ...item, _tempPercent: pct };
                       }
-                      return { ...item, _tempPercent: pct };
-                  }
-                  return { ...item, _tempPercent: -Infinity };
-              });
+                      return { ...item, _tempPercent: -Infinity };
+                  });
 
-              return paretoData
-                  .filter(item => item._tempPercent !== -Infinity)
-                  .sort((a, b) => b._tempPercent - a._tempPercent)
-                  .slice(0, 10);
-          }
-      }
-      
-      if (!isRekapTab || !showPareto || (rekapViewMode !== 'All' && rekapViewMode !== 'Month')) {
-          return processedBaseData;
-      }
-
-      const dataWithPercent = processedBaseData.map(item => {
-          let percent = -Infinity;
-          if (item.isMirrorRow) {
-              if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Month' && selectedMonth !== '') {
-                  const col25Idx = detailHeaders.findIndex(h => isMatchMonth(h.label, selectedMonth) && h.label.includes('25'));
-                  const col26Idx = detailHeaders.findIndex(h => isMatchMonth(h.label, selectedMonth) && h.label.includes('26'));
-                  let sum25 = col25Idx !== -1 ? cleanNumber(item.values[col25Idx]) : 0;
-                  let sum26 = col26Idx !== -1 ? cleanNumber(item.values[col26Idx]) : 0;
-                  if (sum25 !== 0) percent = ((sum26 - sum25) / Math.abs(sum25)) * 100;
-              } else {
-                  percent = item.percentValue !== undefined ? item.percentValue : -Infinity;
+                  return paretoData
+                      .filter(item => item._tempPercent !== -Infinity)
+                      .sort((a, b) => b._tempPercent - a._tempPercent)
+                      .slice(0, 10);
               }
           }
-          return { ...item, _tempPercent: percent };
-      });
+      }
 
-      return dataWithPercent
-          .filter(item => item._tempPercent > 0 && item._tempPercent !== Infinity) 
-          .sort((a, b) => b._tempPercent - a._tempPercent) 
-          .slice(0, 10); 
+      if (isRekapTab) {
+          const dataWithPercent = processedBaseData.map(item => {
+              let percent = -Infinity;
+              if (item.isMirrorRow) {
+                  let newValues = [...item.values];
+                  
+                  // 🚀 DYNAMIC CALCULATION UNTUK REKAP COA (RENTANG BULAN & TOTAL/ACTUAL)
+                  if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Range') {
+                      let sum25 = 0;
+                      let sum26 = 0;
+                      detailHeaders.forEach((h, idx) => {
+                          const monthIdx = getMonthIndexFromName(h.label);
+                          if (monthIdx >= startMonthIndex && monthIdx <= endMonthIndex) {
+                              if (h.label.includes('25')) sum25 += cleanNumber(item.values[idx]);
+                              if (h.label.includes('26')) sum26 += cleanNumber(item.values[idx]);
+                          }
+                      });
+                      
+                      const targetIdx = detailHeaders.findIndex(h => h.isCalc === 'Total 2025');
+                      const actualIdx = detailHeaders.findIndex(h => h.isCalc === 'Total 2026');
+                      const percentIdx = detailHeaders.findIndex(h => h.isCalc === 'Percent');
+                      
+                      if (targetIdx !== -1) newValues[targetIdx] = sum25;
+                      if (actualIdx !== -1) newValues[actualIdx] = sum26;
+                      
+                      if (percentIdx !== -1) {
+                          if (sum25 === 0) {
+                              newValues[percentIdx] = '';
+                          } else {
+                              const pct = (sum26 - sum25) / Math.abs(sum25);
+                              percent = pct * 100;
+                              const pctStr = Math.round(pct * 100) + '%';
+                              if (pct > 0) newValues[percentIdx] = '▲ ' + pctStr;
+                              else if (pct < 0) newValues[percentIdx] = '▼ ' + pctStr.replace('-', '');
+                              else newValues[percentIdx] = pctStr;
+                          }
+                      }
+                  } else {
+                      percent = item.percentValue !== undefined ? item.percentValue : -Infinity;
+                  }
+                  return { ...item, values: newValues, _tempPercent: percent };
+              }
+              return { ...item, _tempPercent: percent };
+          });
+
+          if (showPareto) {
+              return dataWithPercent
+                  .filter(item => item._tempPercent > 0 && item._tempPercent !== Infinity) 
+                  .sort((a, b) => b._tempPercent - a._tempPercent) 
+                  .slice(0, 10); 
+          }
           
-  }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, selectedMonth, startMonthIndex, endMonthIndex, detailHeaders, selectedYear]);
+          return dataWithPercent;
+      }
+
+      return processedBaseData;
+          
+  }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, startMonthIndex, endMonthIndex, detailHeaders, selectedYear]);
 
   const growthSortedData = useMemo(() => {
       const validData = filteredData.filter(d => d.coa !== undefined && d.total2025 !== undefined && !d.isProjectMirror);
@@ -1054,13 +1129,21 @@ const App = () => {
       if (!headerLabel) return false; 
       const label = headerLabel.toLowerCase();
       const isPercent = label === '%' || label.includes('%');
+      const isTarget = label === 'target' || label.includes('total 2025');
+      const isActual = label === 'actual' || label.includes('total 2026');
+      const isTotal = label.includes('total') || isTarget || isActual;
       
-      if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Month' && selectedMonth !== '') {
-          if (isPercent) return true;
-          if (isMatchMonth(label, selectedMonth)) return true;
+      // 🚀 VISIBILITAS KOLOM UNTUK REKAP COA (RENTANG BULAN)
+      if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Range') {
+          if (isPercent || isTarget || isActual) return true;
+          const monthIdx = getMonthIndexFromName(label);
+          if (monthIdx !== -1) {
+              return monthIdx >= startMonthIndex && monthIdx <= endMonthIndex;
+          }
           return false;
       }
       
+      // 🚀 VISIBILITAS KOLOM UNTUK PROJECT 2026 (RENTANG BULAN)
       if (isProjectTab && selectedYear === '2026') {
           if (label.includes('target') || label.includes('actual') || label === '%' || label.includes('sum of xbase')) {
               return true;
@@ -1076,16 +1159,15 @@ const App = () => {
       
       const monthsStr = ['jan', 'feb', 'mar', 'apr', 'may', 'mei', 'jun', 'jul', 'aug', 'agu', 'sep', 'oct', 'okt', 'nov', 'dec', 'des'];
       const isMonth = monthsStr.some(m => label.includes(m));
-      const isTotal = label.includes('total');
 
       if (rekapViewMode === '2025') {
           if (isMonth && label.includes('26')) return false;
-          if (isTotal && label.includes('2026')) return false;
+          if (isActual) return false;
           if (isPercent) return false;
       }
       if (rekapViewMode === '2026') {
           if (isMonth && label.includes('25')) return false;
-          if (isTotal && label.includes('2025')) return false;
+          if (isTarget) return false;
           if (isPercent) return false;
       }
       return true;
@@ -1256,6 +1338,7 @@ const App = () => {
               {autoSync ? 'Live Syncing' : 'Paused'}
             </div>
             
+            {/* 💡 DOWNLOAD EXCEL GLOBAL DI HEADER */}
             <button 
                 onClick={handleDownloadExcel}
                 title="Download Excel"
@@ -1380,7 +1463,6 @@ const App = () => {
                  <button
                    onClick={() => {
                      setRekapViewMode('All');
-                     setSelectedMonth('');
                    }}
                    className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all ${rekapViewMode === 'All' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
                  >
@@ -1390,7 +1472,6 @@ const App = () => {
                    onClick={() => {
                      setRekapViewMode('2025');
                      setShowPareto(false); 
-                     setSelectedMonth(''); 
                      setSelectedYear('2025');
                    }}
                    className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all ${rekapViewMode === '2025' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
@@ -1401,7 +1482,6 @@ const App = () => {
                    onClick={() => {
                      setRekapViewMode('2026');
                      setShowPareto(false); 
-                     setSelectedMonth(''); 
                      setSelectedYear('2026');
                    }}
                    className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all ${rekapViewMode === '2026' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
@@ -1409,28 +1489,45 @@ const App = () => {
                    2026
                  </button>
                  
-                 {/* FITUR KHUSUS TAB BULAN: PILIH BULAN & PARETO */}
+                 {/* FITUR KHUSUS TAB BULAN: RENTANG BULAN & PARETO */}
                  {activeBaseName === 'Rekap COA Bulan' && (
                      <>
                      <div className="w-full sm:w-px h-px sm:h-6 bg-slate-200 my-1 sm:mx-1 sm:my-0"></div>
                      <span className="px-2 py-1.5 text-[11px] font-bold text-slate-500 hidden sm:block">Bulan:</span>
-                     <select
-                       value={selectedMonth}
-                       onChange={(e) => {
-                           if (e.target.value !== '') {
-                               setSelectedMonth(e.target.value);
-                               setRekapViewMode('Month'); 
-                           }
-                       }}
-                       className={`flex-1 sm:flex-none px-2 py-2 sm:py-1.5 text-xs font-bold rounded-lg border text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer transition-colors ${rekapViewMode === 'Month' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
-                     >
-                       <option value="" disabled hidden>Pilih Bulan...</option>
-                       {monthFilterList.map(m => (
-                           <option key={m.code} value={m.code}>{m.label}</option>
-                       ))}
-                     </select>
+                     
+                     <div className={`flex items-center gap-1 bg-white border rounded-lg px-1 py-1 shadow-sm transition-colors ${rekapViewMode === 'Range' ? 'border-emerald-500 ring-1 ring-emerald-500' : 'border-slate-200 hover:bg-slate-50'}`}>
+                         <select
+                             value={startMonthIndex}
+                             onChange={(e) => {
+                                 const val = parseInt(e.target.value);
+                                 setStartMonthIndex(val);
+                                 if (val > endMonthIndex) setEndMonthIndex(val);
+                                 setRekapViewMode('Range');
+                             }}
+                             className={`px-2 py-1 text-xs font-bold focus:outline-none cursor-pointer rounded ${rekapViewMode === 'Range' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 bg-transparent'}`}
+                         >
+                             {monthFilterList.map((m, i) => (
+                                 <option key={`start-${i}`} value={i}>{m.label}</option>
+                             ))}
+                         </select>
+                         <span className="text-slate-400 font-bold text-[10px] px-1">s/d</span>
+                         <select
+                             value={endMonthIndex}
+                             onChange={(e) => {
+                                 const val = parseInt(e.target.value);
+                                 setEndMonthIndex(val);
+                                 if (val < startMonthIndex) setStartMonthIndex(val);
+                                 setRekapViewMode('Range');
+                             }}
+                             className={`px-2 py-1 text-xs font-bold focus:outline-none cursor-pointer rounded ${rekapViewMode === 'Range' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 bg-transparent'}`}
+                         >
+                             {monthFilterList.map((m, i) => (
+                                 <option key={`end-${i}`} value={i}>{m.label}</option>
+                             ))}
+                         </select>
+                     </div>
 
-                     {(rekapViewMode === 'All' || rekapViewMode === 'Month') && (
+                     {(rekapViewMode === 'All' || rekapViewMode === 'Range') && (
                          <>
                          <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
                          <button
@@ -1511,7 +1608,9 @@ const App = () => {
                         const colLabel = col?.label || '';
                         const lowerLabel = colLabel.toLowerCase();
                         const isPercent = lowerLabel === '%' || lowerLabel.includes('%');
-                        const isTotal = lowerLabel.includes('total');
+                        const isTarget = lowerLabel === 'target' || lowerLabel.includes('total 2025');
+                        const isActual = lowerLabel === 'actual' || lowerLabel.includes('total 2026');
+                        const isTotal = lowerLabel.includes('total') || isTarget || isActual;
                         
                         let headerBg = 'bg-[#d9ead3]';
                         let textColor = 'text-slate-800';
@@ -1552,7 +1651,9 @@ const App = () => {
 
                             const colLabel = colLabelObj.label.toLowerCase();
                             const isPercent = colLabel === '%' || colLabel.includes('%');
-                            const isTotal = colLabel.includes('total');
+                            const isTarget = colLabel === 'target' || colLabel.includes('total 2025');
+                            const isActual = colLabel === 'actual' || colLabel.includes('total 2026');
+                            const isTotal = colLabel.includes('total') || isTarget || isActual;
                             
                             let displayVal = val;
                             let colorClass = "text-slate-700";
@@ -1560,19 +1661,6 @@ const App = () => {
                             let bgClass = "";
 
                             if (isPercent) {
-                                if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Month' && selectedMonth !== '') {
-                                    const col25Idx = detailHeaders.findIndex(h => isMatchMonth(h.label, selectedMonth) && h.label.includes('25'));
-                                    const col26Idx = detailHeaders.findIndex(h => isMatchMonth(h.label, selectedMonth) && h.label.includes('26'));
-                                    let sum25 = col25Idx !== -1 ? cleanNumber(row.values[col25Idx]) : 0;
-                                    let sum26 = col26Idx !== -1 ? cleanNumber(row.values[col26Idx]) : 0;
-                                    if (sum25 === 0) displayVal = '';
-                                    else {
-                                        const pct = (sum26 - sum25) / Math.abs(sum25);
-                                        if (pct === 0) displayVal = '';
-                                        else displayVal = Math.round(pct * 100) + '%';
-                                    }
-                                }
-                                
                                 if (displayVal !== '' && displayVal !== ' ' && displayVal !== null) {
                                     alignText = "text-center";
                                     if (typeof displayVal === 'string') {
@@ -1858,6 +1946,7 @@ const App = () => {
                           if (isPercent || isNumberCol) {
                               align = isPercent ? 'text-center' : 'text-right';
                           }
+                          // Memastikan text-white sesuai screenshot Excel untuk seluruh header
                           return (
                             <th key={idx} className={`px-3 py-3 font-bold border-r border-white/20 last:border-r-0 ${align} text-white`}>
                               {label}
