@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, X, RefreshCw, AlertCircle, Layers, 
-  TrendingUp, ChevronRight, ChevronDown, Folder, Table, ArrowDownCircle, Search, Download, Upload, Lock, Database
+  TrendingUp, ChevronRight, ChevronDown, Folder, ArrowDownCircle, Search, Download, Upload, Lock, Database
 } from 'lucide-react';
 
 const DEFAULT_SHEET_ID = '14BU7F2saoKWP6W5Dk2D4FWMv9VewflpMHvaR2Ca8hhA'; // LJR & Global
 const MJR_SHEET_ID = '159sFfywa-0RP85Wtd-xKxnL3HdjEzlwKUriunupNzL8'; // Khusus MJR
-const LJRS_SHEET_ID = '1M7DCOCebvaRFdl8TwH9xwfPVpnDvRKLDbMx_K7nX7os'; // Khusus LJRS (ID DIKOREKSI 100% SESUAI LINK TEKS ASLI)
+const LJRS_SHEET_ID = '1M7DCOCebvaRFdl8TwH9xwfPVpnDvRKLDbMx_K7nX7os'; // Khusus LJRS
 
 // 💡 MENU STRUCTURE DENGAN FOLDER LJR JAKARTA, MJR, & LJRS
 const MENU_STRUCTURE = [
@@ -72,7 +72,7 @@ const getActiveTabConfig = (tabId) => {
   return { id: tabId, label: tabId, baseName: tabId, sheetId: DEFAULT_SHEET_ID };
 };
 
-// 💡 GID MAPPING SESUAI REFERENSI TABEL
+// 💡 GID MAPPING
 const GID_MAPPING = {
   'Budget': '313391198',
   'LJR_Detail': '711609256',
@@ -92,13 +92,11 @@ const GID_MAPPING = {
   'TRANSMARCO_2026': '1033413672',
   'PROJECT FAP_2025': '218289224',
   'PROJECT FAP_2026': '1108934369',
-  // MJR GIDs
   'MJR_Detail': '1645115885',
   'MJR_Rekap COA Tahun': '981156972',
   'MJR_Rekap COA Bulan': '1366423927',
   'ECS_2025': '374221291',
   'ECS_2026': '2110653822',
-  // LJRS GIDs
   'LJRS_Detail': '576794291',
   'LJRS_Rekap COA Tahun': '343086220',
   'LJRS_Rekap COA Bulan': '1904925222',
@@ -118,6 +116,16 @@ const GID_MAPPING = {
   'AAM MAKASAR_2026': '1950741901',
 };
 
+// Data List Bulan
+const monthFilterList = [
+  { label: 'Januari', code: 'jan' }, { label: 'Februari', code: 'feb' },
+  { label: 'Maret', code: 'mar' }, { label: 'April', code: 'apr' },
+  { label: 'Mei', code: 'may' }, { label: 'Juni', code: 'jun' },
+  { label: 'Juli', code: 'jul' }, { label: 'Agustus', code: 'aug' },
+  { label: 'September', code: 'sep' }, { label: 'Oktober', code: 'oct' },
+  { label: 'November', code: 'nov' }, { label: 'Desember', code: 'dec' }
+];
+
 // Helper Pendeteksi Bulan
 const isMatchMonth = (label, monthCode) => {
     if (!monthCode || monthCode === 'All') return false;
@@ -128,6 +136,17 @@ const isMatchMonth = (label, monthCode) => {
         'sep': ['sep'], 'oct': ['oct', 'okt'], 'nov': ['nov'], 'dec': ['dec', 'des']
     };
     return map[monthCode] ? map[monthCode].some(m => lowerLabel.includes(m)) : false;
+};
+
+// Helper Index Bulan untuk Range
+const getMonthIndexFromName = (label) => {
+    if (!label) return -1;
+    const lowerLabel = label.toLowerCase();
+    const monthPrefixes = [
+        ['jan'], ['feb'], ['mar'], ['apr'], ['may', 'mei'], ['jun'],
+        ['jul'], ['aug', 'agu'], ['sep'], ['oct', 'okt'], ['nov'], ['dec', 'des']
+    ];
+    return monthPrefixes.findIndex(prefixes => prefixes.some(p => lowerLabel.includes(p)));
 };
 
 // Parser CSV
@@ -142,26 +161,21 @@ function parseCSV(text) {
     const nextChar = text[i + 1];
     
     if (char === '"' && inQuotes && nextChar === '"') {
-      currentCell += '"';
-      i++; 
+      currentCell += '"'; i++; 
     } else if (char === '"') {
       inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
-      currentRow.push(currentCell);
-      currentCell = '';
+      currentRow.push(currentCell); currentCell = '';
     } else if ((char === '\n' || char === '\r') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') i++;
-      currentRow.push(currentCell);
-      rows.push(currentRow);
-      currentRow = [];
-      currentCell = '';
+      currentRow.push(currentCell); rows.push(currentRow);
+      currentRow = []; currentCell = '';
     } else {
       currentCell += char;
     }
   }
   if (currentRow.length > 0 || currentCell !== '') {
-    currentRow.push(currentCell);
-    rows.push(currentRow);
+    currentRow.push(currentCell); rows.push(currentRow);
   }
   return rows.filter(r => r.some(c => c.trim() !== ''));
 }
@@ -171,7 +185,6 @@ const App = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState({ 'LJR Jakarta': true, 'MJR': true, 'LJRS': true });
 
-  // 💡 Menutup sidebar secara otomatis jika dibuka di HP
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setSidebarOpen(false);
@@ -196,6 +209,10 @@ const App = () => {
   const [selectedMonth, setSelectedMonth] = useState(''); 
   const [showPareto, setShowPareto] = useState(false); 
   const [categoryFilter, setCategoryFilter] = useState('All'); 
+  
+  // 💡 NEW STATE: Filter Rentang Bulan (Start & End)
+  const [startMonthIndex, setStartMonthIndex] = useState(0);
+  const [endMonthIndex, setEndMonthIndex] = useState(11);
   
   const [visibleRows, setVisibleRows] = useState(100);
 
@@ -227,9 +244,7 @@ const App = () => {
     if (str === null || str === undefined) return 0;
     let text = str.toString().trim();
     if (text === '-' || text === '' || text === '0') return 0;
-
     const isNegative = text.includes('-') || (text.includes('(') && text.includes(')'));
-
     text = text.replace(/[^0-9.,]/g, '');
     if (text === '') return 0;
 
@@ -272,7 +287,6 @@ const App = () => {
     document.body.removeChild(link);
   };
 
-  // 💡 PERBAIKAN: Fungsi Download Global
   const handleDownloadExcel = () => {
     if (data.length === 0) {
         alert("Tidak ada data untuk di-download.");
@@ -324,14 +338,18 @@ const App = () => {
         });
     } else {
         // Tab Project (AAM, dll)
-        const headerLabels = detailHeaders.map(h => h.label);
-        csvContent += headerLabels.map(h => `"${h}"`).join(';') + '\n';
+        const visibleHeaders = detailHeaders.filter(h => isColumnVisible(h.label));
+        csvContent += visibleHeaders.map(h => `"${h.label}"`).join(';') + '\n';
         
-        data.forEach(row => {
+        filteredData.forEach(row => {
             if(row.dynamicValues) {
-                const rowData = row.dynamicValues.map(val => {
-                    const cleanVal = val !== undefined && val !== null ? String(val).replace(/"/g, '""') : '';
-                    return `"${cleanVal}"`;
+                const rowData = [];
+                detailHeaders.forEach((h, idx) => {
+                    if (isColumnVisible(h.label)) {
+                        const val = row.dynamicValues[idx];
+                        const cleanVal = val !== undefined && val !== null ? String(val).replace(/"/g, '""') : '';
+                        rowData.push(`"${cleanVal}"`);
+                    }
                 });
                 csvContent += rowData.join(';') + '\n';
             }
@@ -426,6 +444,10 @@ const App = () => {
       setShowPareto(false);
       setSelectedMonth('');
       
+      // Reset Rentang Bulan setiap pindah tab
+      setStartMonthIndex(0);
+      setEndMonthIndex(11);
+      
       const nextTabConfig = getActiveTabConfig(tabId);
       if (selectedYear === 'All' && nextTabConfig.baseName !== 'Detail') {
           setSelectedYear('2025');
@@ -433,7 +455,6 @@ const App = () => {
       setActiveTab(tabId);
     }
     
-    // Menutup sidebar otomatis saat tab di klik (Khusus HP/Layar kecil)
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
         setSidebarOpen(false);
     }
@@ -466,19 +487,15 @@ const App = () => {
           queryParam = `&tq=${encodeURIComponent('SELECT * LIMIT 100000')}`;
       }
 
-      // 💡 LOGIKA SHEET DINAMIS MUTLAK BERDASARKAN GID ATAU NAMA SHEET
       const yearToFetch = selectedYear === 'All' ? '2025' : selectedYear;
       let targetUrl = '';
       
-      // Khusus untuk mapping GID core tab agar menyesuaikan prefix MJR/LJR/LJRS
       const mappingKey = isCoreTab ? tabIdToFetch : `${baseName}_${yearToFetch}`;
       const mappedGid = GID_MAPPING[mappingKey];
 
       if (mappedGid) {
-          // Tarik berdasarkan GID khusus dari referensi URL
           targetUrl = `https://docs.google.com/spreadsheets/d/${currentSheetId}/gviz/tq?tqx=out:csv&gid=${mappedGid}${queryParam}&t=${uniqueId}`;
       } else {
-          // Fallback mekanisme lama untuk menu di luar referensi GID
           let fetchSheetName = baseName;
           if (!isCoreTab) {
               if (baseName === 'AAM DDC Makasar' || baseName === 'AAM MAKASAR') {
@@ -502,7 +519,7 @@ const App = () => {
       if (!rows || rows.length === 0) throw new Error('Data di dalam tab kosong.');
 
       // =========================================================================
-      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS: REKAP COA TAHUN DAN BULAN (FINAL)
+      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS: REKAP COA TAHUN DAN BULAN
       // =========================================================================
       if (baseName === 'Rekap COA Bulan' || baseName === 'Rekap COA Tahun') {
          let headerRowIdx = -1;
@@ -809,6 +826,7 @@ const App = () => {
               if (!row) continue;
 
               const dynamicValues = dynamicHeaderCols.map(col => {
+                  // Basic extraction first, Dynamic filtering done in useMemo for performance
                   if (col.index === 'summery_calc') {
                       let rowSum = 0;
                       dynamicHeaderCols.forEach(headerCol => {
@@ -819,33 +837,9 @@ const App = () => {
                       });
                       return rowSum;
                   } 
-                  else if (col.index === 'target_calc') {
-                      let targetSum = 0;
-                      dynamicHeaderCols.forEach(headerCol => {
-                          if (headerCol.label.includes('25')) {
-                              targetSum += cleanNumber(row[headerCol.index]);
-                          }
-                      });
-                      return targetSum;
-                  } 
-                  else if (col.index === 'actual_calc') {
-                      let actualSum = 0;
-                      dynamicHeaderCols.forEach(headerCol => {
-                          if (headerCol.label.includes('26')) {
-                              actualSum += cleanNumber(row[headerCol.index]);
-                          }
-                      });
-                      return actualSum;
-                  } 
-                  else if (col.index === 'percent_calc') {
-                      let tSum = 0;
-                      let aSum = 0;
-                      dynamicHeaderCols.forEach(headerCol => {
-                          if (headerCol.label.includes('25')) tSum += cleanNumber(row[headerCol.index]);
-                          if (headerCol.label.includes('26')) aSum += cleanNumber(row[headerCol.index]);
-                      });
-                      if (tSum === 0) return ''; 
-                      return (aSum - tSum) / Math.abs(tSum);
+                  else if (col.index === 'target_calc' || col.index === 'actual_calc' || col.index === 'percent_calc') {
+                      // Will be dynamically calculated in useMemo filteredData
+                      return 0; 
                   }
 
                   return row[col.index] !== undefined && row[col.index] !== null ? String(row[col.index]).trim() : '';
@@ -890,6 +884,8 @@ const App = () => {
     setCategoryFilter('All');
     setSearchQuery('');
     setSelectedMonth('');
+    setStartMonthIndex(0);
+    setEndMonthIndex(11);
     setShowPareto(false);
   }, [activeTab, selectedYear]);
 
@@ -941,10 +937,43 @@ const App = () => {
       const isRekapTab = activeBaseName === 'Rekap COA Bulan' || activeBaseName === 'Rekap COA Tahun';
       const isProjectTab = !isRekapTab && activeBaseName !== 'Detail' && activeBaseName !== 'Budget';
       
+      // 🚀 DYNAMIC CALCULATION UNTUK PROJECT 2026 (RENTANG BULAN)
+      let processedBaseData = baseFilteredData;
+      if (isProjectTab && selectedYear === '2026') {
+          processedBaseData = baseFilteredData.map(item => {
+              if (!item.isProjectMirror || !item.dynamicValues) return item;
+
+              let newDynamicValues = [...item.dynamicValues];
+              let targetSum = 0;
+              let actualSum = 0;
+
+              const targetIdx = detailHeaders.findIndex(h => h.index === 'target_calc');
+              const actualIdx = detailHeaders.findIndex(h => h.index === 'actual_calc');
+              const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
+
+              detailHeaders.forEach((h, idx) => {
+                  const monthIdx = getMonthIndexFromName(h.label);
+                  if (monthIdx >= startMonthIndex && monthIdx <= endMonthIndex) {
+                      if (h.label.includes('25')) targetSum += cleanNumber(item.dynamicValues[idx]);
+                      if (h.label.includes('26')) actualSum += cleanNumber(item.dynamicValues[idx]);
+                  }
+              });
+
+              if (targetIdx !== -1) newDynamicValues[targetIdx] = targetSum;
+              if (actualIdx !== -1) newDynamicValues[actualIdx] = actualSum;
+              if (percentIdx !== -1) {
+                  if (targetSum === 0) newDynamicValues[percentIdx] = '';
+                  else newDynamicValues[percentIdx] = (actualSum - targetSum) / Math.abs(targetSum);
+              }
+
+              return { ...item, dynamicValues: newDynamicValues };
+          });
+      }
+
       if (isProjectTab && selectedYear === '2026' && showPareto) {
           const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
           if (percentIdx !== -1) {
-              const paretoData = baseFilteredData.map(item => {
+              const paretoData = processedBaseData.map(item => {
                   if (item.isProjectMirror && item.dynamicValues) {
                       const val = item.dynamicValues[percentIdx];
                       if (item.dynamicValues[0] && String(item.dynamicValues[0]).toLowerCase().includes('total')) {
@@ -971,10 +1000,10 @@ const App = () => {
       }
       
       if (!isRekapTab || !showPareto || (rekapViewMode !== 'All' && rekapViewMode !== 'Month')) {
-          return baseFilteredData;
+          return processedBaseData;
       }
 
-      const dataWithPercent = baseFilteredData.map(item => {
+      const dataWithPercent = processedBaseData.map(item => {
           let percent = -Infinity;
           if (item.isMirrorRow) {
               if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Month' && selectedMonth !== '') {
@@ -995,7 +1024,7 @@ const App = () => {
           .sort((a, b) => b._tempPercent - a._tempPercent) 
           .slice(0, 10); 
           
-  }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, selectedMonth, detailHeaders, selectedYear]);
+  }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, selectedMonth, startMonthIndex, endMonthIndex, detailHeaders, selectedYear]);
 
   const growthSortedData = useMemo(() => {
       const validData = filteredData.filter(d => d.coa !== undefined && d.total2025 !== undefined && !d.isProjectMirror);
@@ -1022,7 +1051,7 @@ const App = () => {
   const isProjectTab = !isRekapCOA && activeBaseName !== 'Detail' && activeBaseName !== 'Budget';
   
   const isColumnVisible = (headerLabel) => {
-      if (!headerLabel) return false; // Guard untuk mencegah error black popup
+      if (!headerLabel) return false; 
       const label = headerLabel.toLowerCase();
       const isPercent = label === '%' || label.includes('%');
       
@@ -1032,11 +1061,15 @@ const App = () => {
           return false;
       }
       
-      if (isProjectTab && selectedMonth !== '') {
-          if (label.includes('target') || label.includes('actual') || label === '%' || label.includes('sum of xbase') || !label.match(/jan|feb|mar|apr|may|mei|jun|jul|aug|agu|sep|oct|okt|nov|dec|des/)) {
+      if (isProjectTab && selectedYear === '2026') {
+          if (label.includes('target') || label.includes('actual') || label === '%' || label.includes('sum of xbase')) {
               return true;
           }
-          return isMatchMonth(label, selectedMonth);
+          const monthIdx = getMonthIndexFromName(label);
+          if (monthIdx !== -1) {
+              return monthIdx >= startMonthIndex && monthIdx <= endMonthIndex;
+          }
+          return true; // Tampilkan kolom non-bulan (misal: kategori, project name)
       }
 
       if (rekapViewMode === 'All') return true;
@@ -1223,7 +1256,6 @@ const App = () => {
               {autoSync ? 'Live Syncing' : 'Paused'}
             </div>
             
-            {/* 💡 DOWNLOAD EXCEL GLOBAL DI HEADER */}
             <button 
                 onClick={handleDownloadExcel}
                 title="Download Excel"
@@ -1297,29 +1329,39 @@ const App = () => {
                        </>
                    )}
                    
-                   {/* FITUR PARETO & BULAN KHUSUS PROJECT 2026 */}
+                   {/* 💡 FITUR RENTANG BULAN & PARETO KHUSUS PROJECT 2026 */}
                    {isProjectTab && selectedYear === '2026' && (
                        <>
                        <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
-                       <select
-                         value={selectedMonth}
-                         onChange={(e) => setSelectedMonth(e.target.value)}
-                         className={`flex-1 sm:flex-none px-2 py-2 sm:py-1.5 text-xs font-bold rounded-lg border focus:outline-none cursor-pointer transition-colors ${selectedMonth !== '' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                       >
-                         <option value="">Semua Bulan</option>
-                         <option value="jan">Januari</option>
-                         <option value="feb">Februari</option>
-                         <option value="mar">Maret</option>
-                         <option value="apr">April</option>
-                         <option value="may">Mei</option>
-                         <option value="jun">Juni</option>
-                         <option value="jul">Juli</option>
-                         <option value="aug">Agustus</option>
-                         <option value="sep">September</option>
-                         <option value="oct">Oktober</option>
-                         <option value="nov">November</option>
-                         <option value="dec">Desember</option>
-                       </select>
+                       <div className="flex items-center gap-1 bg-white border border-emerald-200 rounded-lg px-1 py-1 shadow-sm">
+                           <select
+                               value={startMonthIndex}
+                               onChange={(e) => {
+                                   const val = parseInt(e.target.value);
+                                   setStartMonthIndex(val);
+                                   if (val > endMonthIndex) setEndMonthIndex(val);
+                               }}
+                               className="px-2 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 focus:outline-none cursor-pointer rounded"
+                           >
+                               {monthFilterList.map((m, i) => (
+                                   <option key={`start-${i}`} value={i}>{m.label}</option>
+                               ))}
+                           </select>
+                           <span className="text-slate-400 font-bold text-[10px] px-1">s/d</span>
+                           <select
+                               value={endMonthIndex}
+                               onChange={(e) => {
+                                   const val = parseInt(e.target.value);
+                                   setEndMonthIndex(val);
+                                   if (val < startMonthIndex) setStartMonthIndex(val);
+                               }}
+                               className="px-2 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 focus:outline-none cursor-pointer rounded"
+                           >
+                               {monthFilterList.map((m, i) => (
+                                   <option key={`end-${i}`} value={i}>{m.label}</option>
+                               ))}
+                           </select>
+                       </div>
 
                        <button
                          onClick={() => setShowPareto(!showPareto)}
@@ -1349,7 +1391,7 @@ const App = () => {
                      setRekapViewMode('2025');
                      setShowPareto(false); 
                      setSelectedMonth(''); 
-                     setSelectedYear('2025'); // Sync year
+                     setSelectedYear('2025');
                    }}
                    className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all ${rekapViewMode === '2025' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
                  >
@@ -1360,7 +1402,7 @@ const App = () => {
                      setRekapViewMode('2026');
                      setShowPareto(false); 
                      setSelectedMonth(''); 
-                     setSelectedYear('2026'); // Sync year
+                     setSelectedYear('2026');
                    }}
                    className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all ${rekapViewMode === '2026' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
                  >
@@ -1383,18 +1425,9 @@ const App = () => {
                        className={`flex-1 sm:flex-none px-2 py-2 sm:py-1.5 text-xs font-bold rounded-lg border text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer transition-colors ${rekapViewMode === 'Month' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                      >
                        <option value="" disabled hidden>Pilih Bulan...</option>
-                       <option value="jan">Januari</option>
-                       <option value="feb">Februari</option>
-                       <option value="mar">Maret</option>
-                       <option value="apr">April</option>
-                       <option value="may">Mei</option>
-                       <option value="jun">Juni</option>
-                       <option value="jul">Juli</option>
-                       <option value="aug">Agustus</option>
-                       <option value="sep">September</option>
-                       <option value="oct">Oktober</option>
-                       <option value="nov">November</option>
-                       <option value="dec">Desember</option>
+                       {monthFilterList.map(m => (
+                           <option key={m.code} value={m.code}>{m.label}</option>
+                       ))}
                      </select>
 
                      {(rekapViewMode === 'All' || rekapViewMode === 'Month') && (
@@ -1754,7 +1787,7 @@ const App = () => {
                     {growthSortedData.slice(0, visibleRows).map((item, idx) => {
                       const percent = item.percent;
                       
-                      let textColor = 'textemerald-600';
+                      let textColor = 'text-emerald-600';
                       let barColor = 'bg-emerald-500';
                       
                       if (percent < 0) {
@@ -1825,7 +1858,6 @@ const App = () => {
                           if (isPercent || isNumberCol) {
                               align = isPercent ? 'text-center' : 'text-right';
                           }
-                          // Memastikan text-white sesuai screenshot Excel untuk seluruh header
                           return (
                             <th key={idx} className={`px-3 py-3 font-bold border-r border-white/20 last:border-r-0 ${align} text-white`}>
                               {label}
