@@ -220,7 +220,6 @@ const App = () => {
   const [startMonthIndex, setStartMonthIndex] = useState(0);
   const [endMonthIndex, setEndMonthIndex] = useState(11);
   
-  // 💡 STATE BARU: Filter Kategori Spesifik untuk Rekap COA
   const [rekapCoaFilter, setRekapCoaFilter] = useState('All');
 
   const [visibleRows, setVisibleRows] = useState(100);
@@ -643,12 +642,19 @@ const App = () => {
                      const sum25 = cols2025.reduce((sum, idx) => sum + cleanNumber(row[idx]), 0);
                      const sum26 = cols2026.reduce((sum, idx) => sum + cleanNumber(row[idx]), 0);
                      
+                     let pct = 0;
                      if (sum25 === 0) {
-                         rowPercentValue = -Infinity; 
-                         return '';
+                         if (sum26 > 0) pct = 1;
+                         else if (sum26 < 0) pct = -1;
+                         else {
+                             rowPercentValue = -Infinity; 
+                             return '';
+                         }
+                     } else {
+                         pct = (sum26 - sum25) / Math.abs(sum25);
                      }
-                     const pct = (sum26 - sum25) / Math.abs(sum25);
-                     if (pct === 0) {
+                     
+                     if (pct === 0 && sum25 === 0 && sum26 === 0) {
                          rowPercentValue = -Infinity; 
                          return '';
                      }
@@ -937,7 +943,6 @@ const App = () => {
     };
   }, [autoSync, activeTab, selectedYear]);
 
-  // 💡 SEARCH & FILTER LOGIC
   const baseFilteredData = useMemo(() => {
       let filtered = data;
 
@@ -951,7 +956,6 @@ const App = () => {
           });
       }
 
-      // 🚀 FILTER KHUSUS KATEGORI COA DI TAB REKAP
       if (rekapCoaFilter !== 'All' && ['Rekap COA Tahun', 'Rekap COA Bulan'].includes(activeBaseName)) {
           filtered = filtered.filter(row => {
               if (row.coa) {
@@ -1008,7 +1012,11 @@ const App = () => {
               if (targetIdx !== -1) newDynamicValues[targetIdx] = targetSum;
               if (actualIdx !== -1) newDynamicValues[actualIdx] = actualSum;
               if (percentIdx !== -1) {
-                  if (targetSum === 0) newDynamicValues[percentIdx] = '';
+                  if (targetSum === 0) {
+                      if (actualSum > 0) newDynamicValues[percentIdx] = 1;
+                      else if (actualSum < 0) newDynamicValues[percentIdx] = -1;
+                      else newDynamicValues[percentIdx] = '';
+                  }
                   else newDynamicValues[percentIdx] = (actualSum - targetSum) / Math.abs(targetSum);
               }
 
@@ -1041,10 +1049,18 @@ const App = () => {
                       if (actualIdx !== -1) newValues[actualIdx] = sum26;
                       
                       if (percentIdx !== -1) {
-                          if (sum25 === 0) {
+                          if (sum25 === 0 && sum26 === 0) {
                               newValues[percentIdx] = '';
+                              percent = -Infinity;
                           } else {
-                              const pct = (sum26 - sum25) / Math.abs(sum25);
+                              let pct = 0;
+                              if (sum25 === 0) {
+                                  if (sum26 > 0) pct = 1;
+                                  else if (sum26 < 0) pct = -1;
+                              } else {
+                                  pct = (sum26 - sum25) / Math.abs(sum25);
+                              }
+                              
                               percent = pct * 100;
                               const pctStr = Math.round(pct * 100) + '%';
                               if (pct > 0) newValues[percentIdx] = '▲ ' + pctStr;
@@ -1061,7 +1077,6 @@ const App = () => {
           });
       }
 
-      // 🚀 PARETO EXTRACTOR
       if (showPareto && (isProjectTab && selectedYear === '2026')) {
           const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
           if (percentIdx !== -1) {
@@ -1101,7 +1116,6 @@ const App = () => {
           
   }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, startMonthIndex, endMonthIndex, detailHeaders, selectedYear]);
 
-  // 💡 AUTO-FETCH MESIN PENCARI "KETERANGAN" (XDETDESC) & PROJECT (XPRJ) DARI TAB DETAIL SAAT PARETO AKTIF
   useEffect(() => {
     if (!showPareto) {
         setParetoExtraData({});
@@ -1199,6 +1213,7 @@ const App = () => {
           let percent = 0;
           if (target25 !== 0) percent = ((target26 - target25) / Math.abs(target25)) * 100;
           else if (target26 > 0) percent = 100; 
+          else if (target26 < 0) percent = -100;
           return { ...coa, percent };
       }).sort((a, b) => b.percent - a.percent); 
   }, [filteredData]);
@@ -1824,7 +1839,7 @@ const App = () => {
                   <div className="p-3 bg-slate-50 flex justify-center sticky left-0 w-full">
                     <button 
                       onClick={() => setVisibleRows(prev => prev + 200)}
-                      className="px-5 py-1.5 text-xs text-blue-600 font-bold hover:bg-blue-100 rounded-full transition-colors"
+                      className="flex items-center px-5 py-1.5 text-xs text-blue-600 font-bold hover:bg-blue-100 rounded-full transition-colors"
                     >
                       Tampilkan Lebih Banyak...
                     </button>
