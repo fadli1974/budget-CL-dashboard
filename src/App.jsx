@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, X, RefreshCw, AlertCircle, Layers, 
-  TrendingUp, ChevronRight, ChevronDown, Folder, Table, ArrowDownCircle, Search, Download, Upload, Lock, Database
+  TrendingUp, ChevronRight, ChevronDown, Folder, Table, ArrowDownCircle, Search, Download, Upload, Lock, Database, Info
 } from 'lucide-react';
 
 const DEFAULT_SHEET_ID = '14BU7F2saoKWP6W5Dk2D4FWMv9VewflpMHvaR2Ca8hhA'; // LJR & Global
@@ -192,7 +192,6 @@ const App = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState({ 'LJR Jakarta': true, 'MJR': true, 'LJRS': true });
 
-  // 💡 Menutup sidebar secara otomatis jika dibuka di HP
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setSidebarOpen(false);
@@ -220,16 +219,23 @@ const App = () => {
   
   const [startMonthIndex, setStartMonthIndex] = useState(0);
   const [endMonthIndex, setEndMonthIndex] = useState(11);
+  
+  // 💡 STATE BARU: Filter Kategori Spesifik untuk Rekap COA
+  const [rekapCoaFilter, setRekapCoaFilter] = useState('All');
 
   const [visibleRows, setVisibleRows] = useState(100);
 
-  // States Khusus Tab Detail (Upload & Download)
   const [isUploading, setIsUploading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
 
+  const [paretoExtraData, setParetoExtraData] = useState({});
+  const [loadingExtraData, setLoadingExtraData] = useState(false);
+
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const isRekapCOA = activeBaseName === 'Rekap COA Bulan' || activeBaseName === 'Rekap COA Tahun';
+  const isProjectTab = !isRekapCOA && activeBaseName !== 'Detail' && activeBaseName !== 'Budget';
 
   const formatRupiah = (val) => {
     if (val === 0 || !val === 0 || val === '-' || val === '') return "-";
@@ -282,7 +288,6 @@ const App = () => {
     return isNegative ? -Math.abs(parsedNum) : parsedNum;
   };
 
-  // Fungsi Action Khusus Detail
   const handleDownloadTemplate = () => {
     const headers = ["Reference", "xperiode", "xyear", "xdate", "xtrn", "xnumber", "xdesc", "xdiv", "xdivname", "xsec", "xsecname", "xprj", "xprjname", "xprd", "xprdname", "xdest", "xdestname", "xh1", "xh1name", "xh2", "xh2name", "xh3", "xh3name", "xh4", "xh4name", "xh5", "xacc", "xaccname", "xbase", "xdetdesc"];
     const csvContent = "\uFEFF" + headers.join(';') + '\n';
@@ -296,7 +301,6 @@ const App = () => {
     document.body.removeChild(link);
   };
 
-  // 💡 PERBAIKAN: Fungsi Download Global
   const handleDownloadExcel = () => {
     if (data.length === 0) {
         alert("Tidak ada data untuk di-download.");
@@ -319,11 +323,23 @@ const App = () => {
         });
     } else if (activeBaseName === 'Rekap COA Tahun' || activeBaseName === 'Rekap COA Bulan') {
         const visibleHeaders = detailHeaders.filter(h => isColumnVisible(h.label));
-        const headerLabels = ['Description', ...visibleHeaders.map(h => h.label)];
+        const headerLabels = ['Description'];
+        if (showPareto) {
+            headerLabels.push('Project (xprj)', 'Keterangan (xdetdesc)');
+        }
+        headerLabels.push(...visibleHeaders.map(h => h.label));
+        
         csvContent += headerLabels.map(h => `"${h}"`).join(';') + '\n';
         
         filteredData.forEach(row => {
             const rowData = [ `"${row.coa.replace(/"/g, '""')}"` ];
+            if (showPareto) {
+                const extra = paretoExtraData[row.coa] || { prj: '-', desc: '-' };
+                const prj = extra.prj || '-';
+                const desc = extra.desc || '-';
+                rowData.push(`"${prj.replace(/"/g, '""')}"`);
+                rowData.push(`"${desc.replace(/"/g, '""')}"`);
+            }
             row.values.forEach((val, i) => {
                 if (isColumnVisible(detailHeaders[i].label)) {
                     const cleanVal = val !== undefined && val !== null ? String(val).replace(/"/g, '""') : '';
@@ -347,7 +363,6 @@ const App = () => {
             csvContent += rowData.join(';') + '\n';
         });
     } else {
-        // Tab Project (AAM, dll)
         const visibleHeaders = detailHeaders.filter(h => isColumnVisible(h.label));
         csvContent += visibleHeaders.map(h => `"${h.label}"`).join(';') + '\n';
         
@@ -409,19 +424,17 @@ const App = () => {
     reader.onload = async (e) => {
         const csvText = e.target.result;
         try {
-            
-            // 💡 DYNAMIC UPLOAD SCRIPT_URL: Aplikasi akan mengarahkan upload berdasarkan sheet yang sedang aktif.
             let SCRIPT_URL = "";
             if (activeTabConfig.sheetId === DEFAULT_SHEET_ID) {
-                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzRlX8ExsMLxpNPo7cu15rnriAAX2Fm1YfPdVrIqnz2Se86EhuMIqV8yM1A9Kum8pH6/exec"; // URL LJR JAKARTA
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzRlX8ExsMLxpNPo7cu15rnriAAX2Fm1YfPdVrIqnz2Se86EhuMIqV8yM1A9Kum8pH6/exec";
             } else if (activeTabConfig.sheetId === MJR_SHEET_ID) {
-                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrKoRUaLSsHSXgbsRFbo7wzDoVADAJV658S-BePk0huNWOJHEz5_AWeyfCoE7Bz5cNHg/exec"; // URL MJR
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrKoRUaLSsHSXgbsRFbo7wzDoVADAJV658S-BePk0huNWOJHEz5_AWeyfCoE7Bz5cNHg/exec"; 
             } else if (activeTabConfig.sheetId === LJRS_SHEET_ID) {
-                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKarNoatig79tiPKSGqGc8bUKrxJIAveYbye-F6cM9fkS7iZ54OS6ge3xEzt5pxjLP/exec"; // URL LJRS
+                SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKarNoatig79tiPKSGqGc8bUKrxJIAveYbye-F6cM9fkS7iZ54OS6ge3xEzt5pxjLP/exec"; 
             }
             
             if (!SCRIPT_URL || SCRIPT_URL.includes("URL_SCRIPT")) {
-                alert("⚠️ Anda belum memasukkan URL Web App Script untuk spreadsheet ini di dalam kode (App.jsx). Silakan Deploy kode.gs lalu tempel URL-nya di App.jsx terlebih dahulu.");
+                alert("⚠️ Anda belum memasukkan URL Web App Script untuk spreadsheet ini di dalam kode (App.jsx).");
                 setIsUploading(false);
                 return;
             }
@@ -441,7 +454,7 @@ const App = () => {
             }
         } catch (err) {
             console.error(err);
-            setError("Gagal Upload: Pastikan akses URL Script sudah benar dan disetel ke 'Anyone'. Error: " + err.message);
+            setError("Gagal Upload: Pastikan akses URL Script sudah benar. Error: " + err.message);
         } finally {
             setIsUploading(false);
             setPendingFile(null);
@@ -469,6 +482,8 @@ const App = () => {
       setRekapViewMode('All');
       setShowPareto(false);
       setSelectedMonth('');
+      setParetoExtraData({});
+      setRekapCoaFilter('All');
       
       setStartMonthIndex(0);
       setEndMonthIndex(11);
@@ -480,7 +495,6 @@ const App = () => {
       setActiveTab(tabId);
     }
     
-    // Menutup sidebar otomatis saat tab di klik (Khusus HP/Layar kecil)
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
         setSidebarOpen(false);
     }
@@ -513,19 +527,15 @@ const App = () => {
           queryParam = `&tq=${encodeURIComponent('SELECT * LIMIT 100000')}`;
       }
 
-      // 💡 LOGIKA SHEET DINAMIS MUTLAK BERDASARKAN GID ATAU NAMA SHEET
       const yearToFetch = selectedYear === 'All' ? '2025' : selectedYear;
       let targetUrl = '';
       
-      // Khusus untuk mapping GID core tab agar menyesuaikan prefix MJR/LJR/LJRS
       const mappingKey = isCoreTab ? tabIdToFetch : `${baseName}_${yearToFetch}`;
       const mappedGid = GID_MAPPING[mappingKey];
 
       if (mappedGid) {
-          // Tarik berdasarkan GID khusus dari referensi URL
           targetUrl = `https://docs.google.com/spreadsheets/d/${currentSheetId}/gviz/tq?tqx=out:csv&gid=${mappedGid}${queryParam}&t=${uniqueId}`;
       } else {
-          // Fallback mekanisme lama untuk menu di luar referensi GID
           let fetchSheetName = baseName;
           if (!isCoreTab) {
               if (baseName === 'AAM DDC Makasar' || baseName === 'AAM MAKASAR') {
@@ -548,9 +558,6 @@ const App = () => {
       const rows = parseCSV(csvText);
       if (!rows || rows.length === 0) throw new Error('Data di dalam tab kosong.');
 
-      // =========================================================================
-      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS: REKAP COA TAHUN DAN BULAN (FINAL)
-      // =========================================================================
       if (baseName === 'Rekap COA Bulan' || baseName === 'Rekap COA Tahun') {
          let headerRowIdx = -1;
          let descColIdx = -1;
@@ -670,9 +677,6 @@ const App = () => {
          return;
       }
 
-      // =========================================================================
-      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS TAB "DETAIL"
-      // =========================================================================
       else if (baseName === 'Detail') {
           let headerRowIdx = -1;
           for (let i = 0; i < Math.min(20, rows.length); i++) {
@@ -710,20 +714,16 @@ const App = () => {
                   const yTargetStr = selectedYear.toString(); 
                   const yShortStr = yTargetStr.slice(-2);     
                   
-                  // 💡 STRICT CHECK KHUSUS LJR JAKARTA & MJR (LJRS tidak disentuh sama sekali)
-                  const isLJRSDetail = currentSheetId === LJRS_SHEET_ID;
+                  const isLJRSDetail = currentSheetId === LJRS_SHEET_ID || activeLabel.toUpperCase().includes('LJRS');
                   
                   if (!isLJRSDetail && xyearIdx !== -1) {
-                      // Filter super ketat khusus MJR & LJR: Langsung buang jika XYEAR tidak cocok
                       let val = String(row[xyearIdx] || '').trim().replace('.0', '');
                       if (val !== yTargetStr && val !== yShortStr) {
                           continue; 
                       }
                       rowYearMatch = true;
                   } else {
-                      // Logika bawaan khusus untuk LJRS (Sudah sempurna)
                       let matched = false;
-
                       if (xyearIdx !== -1) {
                           let val = String(row[xyearIdx] || '').trim().replace('.0', '');
                           if (val === yTargetStr || val === yShortStr) matched = true;
@@ -760,9 +760,6 @@ const App = () => {
           return;
       }
 
-      // =========================================================================
-      // 🔒 [LOCKED PERMANENTLY] ENGINE KHUSUS TAB "BUDGET" (Tabel Standar)
-      // =========================================================================
       else if (baseName === 'Budget') {
           let descRowIndex = -1;
           for (let i = 0; i < Math.min(20, rows.length); i++) {
@@ -818,9 +815,6 @@ const App = () => {
           return;
       }
 
-      // =========================================================================
-      // 🚀 [ABSOLUTE DIRECT MIRROR + DYNAMIC KALKULASI] UNTUK AAM, TEREZA, DLL
-      // =========================================================================
       else {
           let headerRowIdx = 0;
           while (headerRowIdx < rows.length && rows[headerRowIdx].every(c => !c || String(c).trim() === '')) {
@@ -925,9 +919,10 @@ const App = () => {
     fetchData(activeTab, false);
     setCategoryFilter('All');
     setSearchQuery('');
-    setStartMonthIndex(0);
-    setEndMonthIndex(11);
+    setSelectedMonth('');
     setShowPareto(false);
+    setParetoExtraData({});
+    setRekapCoaFilter('All');
   }, [activeTab, selectedYear]);
 
   useEffect(() => {
@@ -956,6 +951,16 @@ const App = () => {
           });
       }
 
+      // 🚀 FILTER KHUSUS KATEGORI COA DI TAB REKAP
+      if (rekapCoaFilter !== 'All' && ['Rekap COA Tahun', 'Rekap COA Bulan'].includes(activeBaseName)) {
+          filtered = filtered.filter(row => {
+              if (row.coa) {
+                  return String(row.coa).trim().startsWith(rekapCoaFilter);
+              }
+              return true;
+          });
+      }
+
       if (searchQuery) {
           const query = searchQuery.toLowerCase();
           filtered = filtered.filter(row => {
@@ -972,7 +977,7 @@ const App = () => {
       }
 
       return filtered;
-  }, [data, searchQuery, categoryFilter, activeBaseName]);
+  }, [data, searchQuery, categoryFilter, activeBaseName, rekapCoaFilter]);
 
   const filteredData = useMemo(() => {
       const isRekapTab = activeBaseName === 'Rekap COA Bulan' || activeBaseName === 'Rekap COA Tahun';
@@ -980,7 +985,6 @@ const App = () => {
       
       let processedBaseData = baseFilteredData;
 
-      // 🚀 DYNAMIC CALCULATION UNTUK PROJECT 2026 (RENTANG BULAN)
       if (isProjectTab && selectedYear === '2026') {
           processedBaseData = baseFilteredData.map(item => {
               if (!item.isProjectMirror || !item.dynamicValues) return item;
@@ -1010,45 +1014,14 @@ const App = () => {
 
               return { ...item, dynamicValues: newDynamicValues };
           });
-
-          // 🚀 PARETO UNTUK PROJECT 2026
-          if (showPareto) {
-              const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
-              if (percentIdx !== -1) {
-                  const paretoData = processedBaseData.map(item => {
-                      if (item.isProjectMirror && item.dynamicValues) {
-                          const val = item.dynamicValues[percentIdx];
-                          if (item.dynamicValues[0] && String(item.dynamicValues[0]).toLowerCase().includes('total')) {
-                              return { ...item, _tempPercent: -Infinity };
-                          }
-                          let pct = -Infinity;
-                          if (val !== '' && val !== '-') {
-                              if (typeof val === 'number') pct = val;
-                              else {
-                                  const cleaned = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
-                                  if (!isNaN(cleaned)) pct = cleaned;
-                              }
-                          }
-                          return { ...item, _tempPercent: pct };
-                      }
-                      return { ...item, _tempPercent: -Infinity };
-                  });
-
-                  return paretoData
-                      .filter(item => item._tempPercent !== -Infinity)
-                      .sort((a, b) => b._tempPercent - a._tempPercent)
-                      .slice(0, 10);
-              }
-          }
       }
 
       if (isRekapTab) {
-          const dataWithPercent = processedBaseData.map(item => {
+          processedBaseData = processedBaseData.map(item => {
               let percent = -Infinity;
               if (item.isMirrorRow) {
                   let newValues = [...item.values];
                   
-                  // 🚀 DYNAMIC CALCULATION UNTUK REKAP COA (RENTANG BULAN & TOTAL/ACTUAL)
                   if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Range') {
                       let sum25 = 0;
                       let sum26 = 0;
@@ -1086,20 +1059,137 @@ const App = () => {
               }
               return { ...item, _tempPercent: percent };
           });
+      }
 
-          if (showPareto) {
-              return dataWithPercent
-                  .filter(item => item._tempPercent > 0 && item._tempPercent !== Infinity) 
-                  .sort((a, b) => b._tempPercent - a._tempPercent) 
-                  .slice(0, 10); 
+      // 🚀 PARETO EXTRACTOR
+      if (showPareto && (isProjectTab && selectedYear === '2026')) {
+          const percentIdx = detailHeaders.findIndex(h => h.index === 'percent_calc');
+          if (percentIdx !== -1) {
+              const paretoData = processedBaseData.map(item => {
+                  if (item.isProjectMirror && item.dynamicValues) {
+                      const val = item.dynamicValues[percentIdx];
+                      if (item.dynamicValues[0] && String(item.dynamicValues[0]).toLowerCase().includes('total')) {
+                          return { ...item, _tempPercent: -Infinity };
+                      }
+                      let pct = -Infinity;
+                      if (val !== '' && val !== '-') {
+                          if (typeof val === 'number') pct = val;
+                          else {
+                              const cleaned = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+                              if (!isNaN(cleaned)) pct = cleaned;
+                          }
+                      }
+                      return { ...item, _tempPercent: pct };
+                  }
+                  return { ...item, _tempPercent: -Infinity };
+              });
+              return paretoData.filter(item => item._tempPercent !== -Infinity).sort((a, b) => b._tempPercent - a._tempPercent).slice(0, 10);
           }
-          
-          return dataWithPercent;
+      } else if (showPareto && isRekapTab) {
+          return processedBaseData
+              .filter(item => {
+                  if (item._tempPercent <= 0 || item._tempPercent === Infinity) return false;
+                  const match = item.coa ? item.coa.trim().match(/^([\d.]+)/) : null;
+                  const digitCount = match ? match[1].replace(/\./g, '').length : 0;
+                  return digitCount >= 9;
+              })
+              .sort((a, b) => b._tempPercent - a._tempPercent)
+              .slice(0, 10);
       }
 
       return processedBaseData;
           
   }, [baseFilteredData, showPareto, rekapViewMode, activeBaseName, startMonthIndex, endMonthIndex, detailHeaders, selectedYear]);
+
+  // 💡 AUTO-FETCH MESIN PENCARI "KETERANGAN" (XDETDESC) & PROJECT (XPRJ) DARI TAB DETAIL SAAT PARETO AKTIF
+  useEffect(() => {
+    if (!showPareto) {
+        setParetoExtraData({});
+        return;
+    }
+    if (isRekapCOA && filteredData.length > 0) {
+        const missingAny = filteredData.some(d => !Object.prototype.hasOwnProperty.call(paretoExtraData, d.coa));
+        if (!missingAny) return; 
+
+        const fetchExtraData = async () => {
+            setLoadingExtraData(true);
+            try {
+                const tabConfig = getActiveTabConfig(activeTab);
+                let prefix = 'LJR';
+                if (tabConfig.sheetId === MJR_SHEET_ID) prefix = 'MJR';
+                if (tabConfig.sheetId === LJRS_SHEET_ID) prefix = 'LJRS';
+                
+                const detailGid = GID_MAPPING[`${prefix}_Detail`];
+                if (!detailGid) throw new Error("GID Detail tidak ditemukan");
+
+                const targetUrl = `https://docs.google.com/spreadsheets/d/${tabConfig.sheetId}/gviz/tq?tqx=out:csv&gid=${detailGid}&tq=${encodeURIComponent('SELECT * LIMIT 50000')}`;
+                const response = await fetch(targetUrl);
+                if (!response.ok) throw new Error("Gagal fetch Detail");
+                const csvText = await response.text();
+                const rows = parseCSV(csvText);
+                
+                let headerRowIdx = -1;
+                for (let i = 0; i < Math.min(20, rows.length); i++) {
+                    if (!rows[i]) continue;
+                    const rowLower = rows[i].map(c => c ? c.toLowerCase() : '');
+                    if (rowLower.some(c => c.includes('xyear') || c.includes('xacc'))) {
+                        headerRowIdx = i; break;
+                    }
+                }
+                if (headerRowIdx === -1) headerRowIdx = 0;
+                
+                const headers = rows[headerRowIdx].map(h => h ? h.toLowerCase() : '');
+                const xaccIdx = headers.findIndex(h => h === 'xacc');
+                const xaccNameIdx = headers.findIndex(h => h === 'xaccname');
+                const descIdx = headers.findIndex(h => h === 'xdetdesc');
+                const prjIdx = headers.findIndex(h => h === 'xprj'); 
+
+                const newExtraData = { ...paretoExtraData };
+                const topCoas = filteredData.map(d => d.coa);
+
+                if (descIdx !== -1 || prjIdx !== -1) {
+                    for (let i = rows.length - 1; i > headerRowIdx; i--) {
+                        const r = rows[i];
+                        if (!r) continue;
+                        
+                        let coaCode = xaccIdx !== -1 && r[xaccIdx] ? String(r[xaccIdx]).trim() : '';
+                        let coaName = xaccNameIdx !== -1 && r[xaccNameIdx] ? String(r[xaccNameIdx]).trim().toUpperCase() : '';
+                        const rowDesc = descIdx !== -1 && r[descIdx] ? String(r[descIdx]).trim() : '';
+                        const rowPrj = prjIdx !== -1 && r[prjIdx] ? String(r[prjIdx]).trim() : '';
+
+                        if (rowDesc !== '' || rowPrj !== '') {
+                            topCoas.forEach(targetCoa => {
+                                if (!newExtraData[targetCoa]) {
+                                    if (coaCode && targetCoa.includes(coaCode)) {
+                                        newExtraData[targetCoa] = { desc: rowDesc, prj: rowPrj };
+                                    } else if (coaName && targetCoa.toUpperCase().includes(coaName) && coaName.length > 5) {
+                                        newExtraData[targetCoa] = { desc: rowDesc, prj: rowPrj };
+                                    }
+                                }
+                            });
+                        }
+                        let foundCount = topCoas.filter(c => newExtraData[c]).length;
+                        if (foundCount >= topCoas.length) break; 
+                    }
+                }
+                
+                topCoas.forEach(c => {
+                    if (!newExtraData[c]) newExtraData[c] = { desc: '-', prj: '-' };
+                });
+
+                setParetoExtraData(newExtraData);
+            } catch (e) {
+                console.error('Keterangan & Project fetch error:', e);
+                const fallback = { ...paretoExtraData };
+                filteredData.forEach(d => { fallback[d.coa] = { desc: '-', prj: '-' }; });
+                setParetoExtraData(fallback);
+            } finally {
+                setLoadingExtraData(false);
+            }
+        };
+        fetchExtraData();
+    }
+  }, [showPareto, filteredData, activeTab, paretoExtraData, isRekapCOA]);
 
   const growthSortedData = useMemo(() => {
       const validData = filteredData.filter(d => d.coa !== undefined && d.total2025 !== undefined && !d.isProjectMirror);
@@ -1121,9 +1211,6 @@ const App = () => {
   const getBudgetMonthHeaders = () => {
     return ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
   };
-
-  const isRekapCOA = activeBaseName === 'Rekap COA Bulan' || activeBaseName === 'Rekap COA Tahun';
-  const isProjectTab = !isRekapCOA && activeBaseName !== 'Detail' && activeBaseName !== 'Budget';
   
   const isColumnVisible = (headerLabel) => {
       if (!headerLabel) return false; 
@@ -1133,7 +1220,6 @@ const App = () => {
       const isActual = label === 'actual' || label.includes('total 2026');
       const isTotal = label.includes('total') || isTarget || isActual;
       
-      // 🚀 VISIBILITAS KOLOM UNTUK REKAP COA (RENTANG BULAN)
       if (activeBaseName === 'Rekap COA Bulan' && rekapViewMode === 'Range') {
           if (isPercent || isTarget || isActual) return true;
           const monthIdx = getMonthIndexFromName(label);
@@ -1143,7 +1229,6 @@ const App = () => {
           return false;
       }
       
-      // 🚀 VISIBILITAS KOLOM UNTUK PROJECT 2026 (RENTANG BULAN)
       if (isProjectTab && selectedYear === '2026') {
           if (label.includes('target') || label.includes('actual') || label === '%' || label.includes('sum of xbase')) {
               return true;
@@ -1152,7 +1237,7 @@ const App = () => {
           if (monthIdx !== -1) {
               return monthIdx >= startMonthIndex && monthIdx <= endMonthIndex;
           }
-          return true; // Tampilkan kolom non-bulan (misal: kategori, project name)
+          return true; 
       }
 
       if (rekapViewMode === 'All') return true;
@@ -1338,7 +1423,6 @@ const App = () => {
               {autoSync ? 'Live Syncing' : 'Paused'}
             </div>
             
-            {/* 💡 DOWNLOAD EXCEL GLOBAL DI HEADER */}
             <button 
                 onClick={handleDownloadExcel}
                 title="Download Excel"
@@ -1371,7 +1455,6 @@ const App = () => {
                {/* MENU FILTER KHUSUS TAB SELAIN REKAP MIRROR */}
                {!isRekapCOA && (
                  <div className="bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex flex-wrap items-center w-full sm:w-auto shrink-0 gap-1">
-                   {/* HANYA DETAIL YANG PUNYA SEMUA DATA */}
                    {activeBaseName === 'Detail' && (
                      <button
                        onClick={() => setSelectedYear('All')}
@@ -1393,7 +1476,6 @@ const App = () => {
                      2026
                    </button>
 
-                   {/* FILTER KATEGORI KHUSUS PROJECT 2025 & 2026 */}
                    {isProjectTab && (
                        <>
                        <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
@@ -1412,7 +1494,6 @@ const App = () => {
                        </>
                    )}
                    
-                   {/* 💡 FITUR RENTANG BULAN & PARETO KHUSUS PROJECT 2026 */}
                    {isProjectTab && selectedYear === '2026' && (
                        <>
                        <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
@@ -1489,9 +1570,24 @@ const App = () => {
                    2026
                  </button>
                  
-                 {/* FITUR KHUSUS TAB BULAN: RENTANG BULAN & PARETO */}
+                 {/* 💡 FITUR KHUSUS TAB BULAN: FILTER COA, RENTANG BULAN, & PARETO */}
                  {activeBaseName === 'Rekap COA Bulan' && (
                      <>
+                     <div className="w-full sm:w-px h-px sm:h-6 bg-slate-200 my-1 sm:mx-1 sm:my-0"></div>
+                     
+                     <select
+                         value={rekapCoaFilter}
+                         onChange={(e) => setRekapCoaFilter(e.target.value)}
+                         className="px-2 py-1.5 text-xs font-bold rounded-lg border text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer transition-colors border-slate-200 bg-white hover:bg-slate-50"
+                     >
+                         <option value="All">Semua Kategori</option>
+                         <option value="5.1.1">5.1.1 VARIABLE COST</option>
+                         <option value="5.1.2">5.1.2 FIXED COST</option>
+                         <option value="5.2.1">5.2.1 OPERATING EXPENSES</option>
+                         <option value="5.4.1">5.4.1 OTHERS INCOME</option>
+                         <option value="5.4.2">5.4.2 OTHERS EXPENSES</option>
+                     </select>
+
                      <div className="w-full sm:w-px h-px sm:h-6 bg-slate-200 my-1 sm:mx-1 sm:my-0"></div>
                      <span className="px-2 py-1.5 text-[11px] font-bold text-slate-500 hidden sm:block">Bulan:</span>
                      
@@ -1602,7 +1698,19 @@ const App = () => {
                 <table className="w-full text-xs text-left whitespace-nowrap">
                   <thead className="text-xs text-slate-800 bg-[#d9ead3] border-b border-slate-300 sticky top-0 z-10 shadow-sm">
                     <tr>
-                      <th className="px-3 py-2.5 font-bold border-r border-slate-300 min-w-[400px]">Description</th>
+                      <th className="px-3 py-2.5 font-bold border-r border-slate-300 min-w-[400px] whitespace-nowrap">Description</th>
+                      {/* 💡 KOLOM PROJECT & KETERANGAN MUNCUL SAAT PARETO AKTIF */}
+                      {showPareto && (
+                        <>
+                          <th className="px-3 py-2.5 font-bold border-r border-slate-300 min-w-[150px] bg-[#d9ead3] text-slate-800 whitespace-nowrap">
+                            Project (xprj)
+                          </th>
+                          <th className="px-3 py-2.5 font-bold border-r border-slate-300 min-w-[350px] bg-[#d9ead3] text-slate-800 whitespace-nowrap">
+                            Keterangan (xdetdesc)
+                          </th>
+                        </>
+                      )}
+
                       {detailHeaders.map((col, idx) => {
                         if (!isColumnVisible(col.label)) return null;
                         const colLabel = col?.label || '';
@@ -1634,17 +1742,35 @@ const App = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {loading ? (
-                      <tr><td colSpan={detailHeaders.length + 1} className="p-8 text-center text-slate-400">Sedang menarik data langsung dari Google Sheets...</td></tr>
+                      <tr><td colSpan={detailHeaders.length + 3} className="p-8 text-center text-slate-400">Sedang menarik data langsung dari Google Sheets...</td></tr>
                     ) : filteredData.length === 0 ? (
-                      <tr><td colSpan={detailHeaders.length + 1} className="p-8 text-center text-slate-400 font-medium">Data yang Anda cari tidak ditemukan.</td></tr>
+                      <tr><td colSpan={detailHeaders.length + 3} className="p-8 text-center text-slate-400 font-medium">Data yang Anda cari tidak ditemukan.</td></tr>
                     ) : (
                       filteredData.slice(0, visibleRows).map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-3 py-2 text-slate-800 border-r border-slate-200 min-w-[400px] whitespace-normal break-words">
+                          <td className="px-3 py-2 text-slate-800 border-r border-slate-200 min-w-[400px] whitespace-nowrap">
                             <div style={{ paddingLeft: `${row.indentLevel * 1.5}rem`, fontWeight: row.indentLevel === 0 ? 'bold' : 'normal' }}>
                               {row.coa}
                             </div>
                           </td>
+                          {/* 💡 RENDER ISI KOLOM PROJECT & KETERANGAN */}
+                          {showPareto && (
+                            <>
+                              <td className="px-3 py-2 text-slate-600 border-r border-slate-200 min-w-[150px] whitespace-nowrap bg-emerald-50/40 text-[11px] font-bold uppercase">
+                                  {loadingExtraData && !paretoExtraData[row.coa]
+                                    ? <span className="animate-pulse text-emerald-600 flex items-center gap-1"><RefreshCw size={12} className="animate-spin" /></span> 
+                                    : (paretoExtraData[row.coa]?.prj || '-')
+                                  }
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 border-r border-slate-200 min-w-[350px] whitespace-normal break-words bg-emerald-50/40 text-[11px] font-medium leading-relaxed">
+                                  {loadingExtraData && !paretoExtraData[row.coa]
+                                    ? <span className="animate-pulse text-emerald-600 flex items-center gap-1"><RefreshCw size={12} className="animate-spin" /> Sedang mencari...</span> 
+                                    : (paretoExtraData[row.coa]?.desc || '-')
+                                  }
+                              </td>
+                            </>
+                          )}
+
                           {row.values?.map((val, i) => {
                             const colLabelObj = detailHeaders[i];
                             if (!colLabelObj || !isColumnVisible(colLabelObj.label)) return null;
