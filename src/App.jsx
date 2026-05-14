@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, X, RefreshCw, AlertCircle, Layers, 
-  TrendingUp, ChevronRight, ChevronDown, Folder, Table, ArrowDownCircle, Search, Download, Upload, Lock, Database, Info
+  TrendingUp, ChevronRight, ChevronDown, Folder, ArrowDownCircle, Search, Download, Upload, Lock, Database
 } from 'lucide-react';
 
 const DEFAULT_SHEET_ID = '14BU7F2saoKWP6W5Dk2D4FWMv9VewflpMHvaR2Ca8hhA'; // LJR & Global
@@ -56,7 +56,8 @@ const MENU_STRUCTURE = [
       { id: 'MJE', label: 'MJE', baseName: 'MJE' },
       { id: 'PPG', label: 'PPG', baseName: 'PPG' },
       { id: 'TEMPO', label: 'TEMPO', baseName: 'TEMPO' },
-      { id: 'AAM MAKASAR', label: 'AAM MAKASAR', baseName: 'AAM MAKASAR' }
+      { id: 'AAM MAKASAR', label: 'AAM MAKASAR', baseName: 'AAM MAKASAR' },
+      { id: 'UHN', label: 'UHN', baseName: 'UHN' } // 💡 MENU UHN DITAMBAHKAN
     ]
   }
 ];
@@ -116,9 +117,10 @@ const GID_MAPPING = {
   'TEMPO_2026': '585480614',
   'AAM MAKASAR_2025': '1821555619',
   'AAM MAKASAR_2026': '1950741901',
+  'UHN_2025': '522736707', // 💡 UHN GID
+  'UHN_2026': '655551755', // 💡 UHN GID
 };
 
-// Data List Bulan
 const monthFilterList = [
   { label: 'Januari', code: 'jan' }, { label: 'Februari', code: 'feb' },
   { label: 'Maret', code: 'mar' }, { label: 'April', code: 'apr' },
@@ -128,7 +130,6 @@ const monthFilterList = [
   { label: 'November', code: 'nov' }, { label: 'Desember', code: 'dec' }
 ];
 
-// Helper Pendeteksi Bulan
 const isMatchMonth = (label, monthCode) => {
     if (!monthCode || monthCode === 'All') return false;
     const lowerLabel = label.toLowerCase();
@@ -140,7 +141,6 @@ const isMatchMonth = (label, monthCode) => {
     return map[monthCode] ? map[monthCode].some(m => lowerLabel.includes(m)) : false;
 };
 
-// Helper Index Bulan untuk Range
 const getMonthIndexFromName = (label) => {
     if (!label) return -1;
     const lowerLabel = label.toLowerCase();
@@ -151,7 +151,6 @@ const getMonthIndexFromName = (label) => {
     return monthPrefixes.findIndex(prefixes => prefixes.some(p => lowerLabel.includes(p)));
 };
 
-// Parser CSV
 function parseCSV(text) {
   const rows = [];
   let currentRow = [];
@@ -216,11 +215,10 @@ const App = () => {
   const [selectedMonth, setSelectedMonth] = useState(''); 
   const [showPareto, setShowPareto] = useState(false); 
   const [categoryFilter, setCategoryFilter] = useState('All'); 
+  const [rekapCoaFilter, setRekapCoaFilter] = useState('All');
   
   const [startMonthIndex, setStartMonthIndex] = useState(0);
   const [endMonthIndex, setEndMonthIndex] = useState(11);
-  
-  const [rekapCoaFilter, setRekapCoaFilter] = useState('All');
 
   const [visibleRows, setVisibleRows] = useState(100);
 
@@ -256,9 +254,7 @@ const App = () => {
     if (str === null || str === undefined) return 0;
     let text = str.toString().trim();
     if (text === '-' || text === '' || text === '0') return 0;
-
     const isNegative = text.includes('-') || (text.includes('(') && text.includes(')'));
-
     text = text.replace(/[^0-9.,]/g, '');
     if (text === '') return 0;
 
@@ -482,6 +478,7 @@ const App = () => {
       setShowPareto(false);
       setSelectedMonth('');
       setParetoExtraData({});
+      setCategoryFilter('All');
       setRekapCoaFilter('All');
       
       setStartMonthIndex(0);
@@ -642,19 +639,12 @@ const App = () => {
                      const sum25 = cols2025.reduce((sum, idx) => sum + cleanNumber(row[idx]), 0);
                      const sum26 = cols2026.reduce((sum, idx) => sum + cleanNumber(row[idx]), 0);
                      
-                     let pct = 0;
                      if (sum25 === 0) {
-                         if (sum26 > 0) pct = 1;
-                         else if (sum26 < 0) pct = -1;
-                         else {
-                             rowPercentValue = -Infinity; 
-                             return '';
-                         }
-                     } else {
-                         pct = (sum26 - sum25) / Math.abs(sum25);
+                         rowPercentValue = -Infinity; 
+                         return '';
                      }
-                     
-                     if (pct === 0 && sum25 === 0 && sum26 === 0) {
+                     const pct = (sum26 - sum25) / Math.abs(sum25);
+                     if (pct === 0) {
                          rowPercentValue = -Infinity; 
                          return '';
                      }
@@ -925,7 +915,8 @@ const App = () => {
     fetchData(activeTab, false);
     setCategoryFilter('All');
     setSearchQuery('');
-    setSelectedMonth('');
+    setStartMonthIndex(0);
+    setEndMonthIndex(11);
     setShowPareto(false);
     setParetoExtraData({});
     setRekapCoaFilter('All');
@@ -1213,7 +1204,6 @@ const App = () => {
           let percent = 0;
           if (target25 !== 0) percent = ((target26 - target25) / Math.abs(target25)) * 100;
           else if (target26 > 0) percent = 100; 
-          else if (target26 < 0) percent = -100;
           return { ...coa, percent };
       }).sort((a, b) => b.percent - a.percent); 
   }, [filteredData]);
@@ -1226,7 +1216,7 @@ const App = () => {
   const getBudgetMonthHeaders = () => {
     return ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
   };
-  
+
   const isColumnVisible = (headerLabel) => {
       if (!headerLabel) return false; 
       const label = headerLabel.toLowerCase();
@@ -1470,6 +1460,7 @@ const App = () => {
                {/* MENU FILTER KHUSUS TAB SELAIN REKAP MIRROR */}
                {!isRekapCOA && (
                  <div className="bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm flex flex-wrap items-center w-full sm:w-auto shrink-0 gap-1">
+                   {/* HANYA DETAIL YANG PUNYA SEMUA DATA */}
                    {activeBaseName === 'Detail' && (
                      <button
                        onClick={() => setSelectedYear('All')}
@@ -1491,24 +1482,26 @@ const App = () => {
                      2026
                    </button>
 
+                   {/* FILTER KATEGORI KHUSUS PROJECT 2025 & 2026 */}
                    {isProjectTab && (
                        <>
                        <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
-                       <button
-                         onClick={() => setCategoryFilter(categoryFilter === 'FIXED COST' ? 'All' : 'FIXED COST')}
-                         className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all ${categoryFilter === 'FIXED COST' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}
+                       <select
+                         value={categoryFilter}
+                         onChange={(e) => setCategoryFilter(e.target.value)}
+                         className="px-2 py-1.5 text-xs font-bold rounded-lg border text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors border-slate-200 bg-white hover:bg-slate-50"
                        >
-                         FIXED
-                       </button>
-                       <button
-                         onClick={() => setCategoryFilter(categoryFilter === 'VARIABLE COST' ? 'All' : 'VARIABLE COST')}
-                         className={`flex-1 sm:flex-none px-2 sm:px-4 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all ${categoryFilter === 'VARIABLE COST' ? 'bg-orange-500 text-white shadow-md' : 'text-orange-600 bg-orange-50 hover:bg-orange-100'}`}
-                       >
-                         VARIABLE
-                       </button>
+                         <option value="All">Semua Kategori</option>
+                         <option value="VARIABLE COST">VARIABLE COST</option>
+                         <option value="FIXED COST">FIXED COST</option>
+                         <option value="OPERATING EXPENSEE">OPERATING EXPENSES</option>
+                         <option value="OTHERS INCOME">OTHERS INCOME</option>
+                         <option value="OTHERS EXPENSES">OTHERS EXPENSES</option>
+                       </select>
                        </>
                    )}
                    
+                   {/* FITUR PARETO & BULAN KHUSUS PROJECT 2026 */}
                    {isProjectTab && selectedYear === '2026' && (
                        <>
                        <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block"></div>
@@ -1839,7 +1832,7 @@ const App = () => {
                   <div className="p-3 bg-slate-50 flex justify-center sticky left-0 w-full">
                     <button 
                       onClick={() => setVisibleRows(prev => prev + 200)}
-                      className="flex items-center px-5 py-1.5 text-xs text-blue-600 font-bold hover:bg-blue-100 rounded-full transition-colors"
+                      className="px-5 py-1.5 text-xs text-blue-600 font-bold hover:bg-blue-100 rounded-full transition-colors"
                     >
                       Tampilkan Lebih Banyak...
                     </button>
